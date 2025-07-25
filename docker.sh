@@ -13,7 +13,7 @@ DEFAULT_CONTAINER_NAME="aoc2026_container"
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
+BLUE='\033[0;36m'
 NC='\033[0m'
 
 print_info() {
@@ -49,9 +49,9 @@ build_image() {
     if check_image_exists "${image_name}"; then
         print_warning "Docker image '${image_name}' already exists. Skipping build."
         print_info "If you want to rebuild the image, please remove it first using:"
-        echo " docker rmi ${image_name}"
-        echo "Or rebuild with a different name using: ./docker.sh rebuild"
-        return
+        echo "  docker rmi ${image_name}"
+        echo "Or use: ./docker.sh rebuild"
+        return 0
     fi
 
     print_info "Docker image '${image_name}' does not exist. Building the image..."
@@ -75,16 +75,20 @@ build_image() {
 show_usage() {
 cat << EOF
     Docker Environment Management Script
-    Usage: $0 <command> [options]
-    Commands:
-        build       - Build the Docker image
-        run         - Run the Docker container
-        stop        - Stop the Docker container
-        remove      - Remove the Docker container
-        rebuild     - Rebuild the Docker image
-        help        - Show this help message
-    Options:
 
+    Usage: $0 <command> [options]
+    
+    Commands:
+        build           - Build the Docker image
+        run             - Run the Docker container
+        stop            - Stop the Docker container
+        remove          - Remove the Docker container
+        rebuild         - Rebuild the Docker image
+        help            - Show this help message
+    
+    Options:
+        image_name      - Specify a custom image name (optional, default: ${DEFAULT_IMAGE_NAME})
+    
     Example:
         $0 build
         $0 run
@@ -92,7 +96,8 @@ cat << EOF
         $0 remove
         $0 rebuild
         $0 help
-    Defeult settings:
+    
+    Default settings:
         Image Name:     ${DEFAULT_IMAGE_NAME}
         Container Name: ${DEFAULT_CONTAINER_NAME}
 EOF
@@ -107,7 +112,11 @@ main() {
     # Parse command line arguments
     case "$1" in
         build)
-            build_image
+            if [ $# -ge 2 ]; then
+                build_image "$2"
+            else
+                build_image
+            fi
             ;;
         "help")
             show_usage
