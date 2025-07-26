@@ -41,6 +41,53 @@ check_image_exists() {
     fi
 }
 
+check_container_status() {
+    local container_name="$1"
+    if docker container inspect "${container_name}" >/dev/null 2>&1; then
+        # Container exists, check its status
+        local status=$(docker container inspect "${container_name}" --format '{{.State.Status}}')
+        if [ "${status}" == "running" ]; then
+            echo "running"
+        else
+            echo "stopped"
+        fi
+    else
+        # Container does not exist
+        echo "not_exists"
+    fi
+}
+
+run_container() {
+    if ! check_image_exists "${DEFAULT_IMAGE_NAME}"; then
+        print_error "Docker image '${DEFAULT_IMAGE_NAME}' does not exist."
+        print_info "Please build the image first using: ./docker.sh build"
+        return 1
+    fi
+
+    local status=$(check_container_status "${DEFAULT_CONTAINER_NAME}")
+    print_info "Container '${DEFAULT_CONTAINER_NAME}' status: ${status}"
+
+    case "${status}" in
+        "running")
+            print_info "Container '${DEFAULT_CONTAINER_NAME}' is already running. Entering..."
+            docker exec -it "${DEFAULT_CONTAINER_NAME}" bash
+            ;;
+        "stopped")
+            print_info "Container '${DEFAULT_CONTAINER_NAME}' exists but is stopped. Starting and entering..."
+            docker start "${DEFAULT_CONTAINER_NAME}"
+            docker exec -it "${DEFAULT_CONTAINER_NAME}" bash
+            ;;
+        "not_exists")
+            print_info "Container '${DEFAULT_CONTAINER_NAME}' does not exist. Creating and starting..."
+            docker run -it --name "${DEFAULT_CONTAINER_NAME}" "${DEFAULT_IMAGE_NAME}" bash
+            ;;
+        *)
+            print_error "Unexpected container status: ${status}"
+            return 1
+            ;;
+    esac
+}
+
 build_image() {
     local image_name=${1:-$DEFAULT_IMAGE_NAME}
 
@@ -118,12 +165,16 @@ main() {
                 build_image
             fi
             ;;
-        "help")
+        run)
+            run_container
+            ;;
+        help)
             show_usage
             ;;
         *)
             print_error "Unknown command: $1"
-            echo "Use 'help' to see available commands."
+            echo "  Use 'help' to see available commands."
+            echo ""
             show_usage
             return 1
             ;;
