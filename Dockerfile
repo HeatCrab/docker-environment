@@ -117,7 +117,7 @@ COPY --from=common_pkg_provider /etc/profile.d/conda.sh /etc/profile.d/conda.sh
 COPY --from=verilator_provider /usr/local /usr/local
 COPY --from=systemc_provider /opt/systemc /opt/systemc
 
-RUN groupadd -g $USER_GID $USERNAME && \
+RUN (groupadd -g $USER_GID $USERNAME 2>/dev/null || true) && \
     useradd -u $USER_UID -g $USER_GID -s /bin/bash -m $USERNAME &&\
     chown -R $USER_UID:$USER_GID /opt/conda && \
     mkdir -p /home/$USERNAME/.conda && \
