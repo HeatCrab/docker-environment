@@ -1,13 +1,43 @@
-#! /bin/bash
+#!/bin/bash
 
 # This script is used to set up a Docker environment
 # Simplify the process of running Docker commands
 
-# If the command failes, exit immediately
+# If the command fails, exit immediately
 set -e
+
+# Save the first command and shift to remove it from arguments
+COMMAND="$1"
+shift
 
 DEFAULT_IMAGE_NAME="aoc2026_env"
 DEFAULT_CONTAINER_NAME="aoc2026_container"
+DEFAULT_USERNAME="user"
+DEFAULT_HOSTNAME="docker-env"
+MOUNT_PATH=()
+
+# Parse command line arguments (excluding the first command)
+while [[ $# -gt 0 ]]; do
+    case $1 in 
+        --image_name)
+            [[ -z $2 || $2 == --* ]] && { echo "--image_name requires value"; exit 1; }
+            DEFAULT_IMAGE_NAME=$2; shift 2 ;;
+        --cont_name)
+            [[ -z $2 || $2 == --* ]] && { echo "--cont_name requires value"; exit 1; }
+            DEFAULT_CONTAINER_NAME=$2; shift 2 ;;
+        --username)
+            [[ -z $2 || $2 == --* ]] && { echo "--username requires value"; exit 1; }
+            DEFAULT_USERNAME=$2; shift 2 ;;
+        --hostname)
+            [[ -z $2 || $2 == --* ]] && { echo "--hostname requires value"; exit 1; }
+            DEFAULT_HOSTNAME=$2; shift 2 ;;
+        --mount)
+            [[ -z $2 || $2 == --* ]] && { echo "--mount requires value"; exit 1; }
+            MOUNT_PATH+=("$2"); shift 2 ;;
+        *)
+            echo "Unknown flag: $1" && show_usage && exit 1 ;;
+    esac
+done
 
 # Function to print messages in color
 RED='\033[0;31m'
@@ -70,16 +100,35 @@ run_container() {
     case "${status}" in
         "running")
             print_info "Container '${DEFAULT_CONTAINER_NAME}' is already running. Entering..."
-            docker exec -it "${DEFAULT_CONTAINER_NAME}" bash
+            docker exec -it --user "${DEFAULT_USERNAME}" "${DEFAULT_CONTAINER_NAME}" bash
             ;;
         "stopped")
             print_info "Container '${DEFAULT_CONTAINER_NAME}' exists but is stopped. Starting and entering..."
             docker start "${DEFAULT_CONTAINER_NAME}"
-            docker exec -it "${DEFAULT_CONTAINER_NAME}" bash
+            docker exec -it --user "${DEFAULT_USERNAME}" "${DEFAULT_CONTAINER_NAME}" bash
             ;;
         "not_exists")
             print_info "Container '${DEFAULT_CONTAINER_NAME}' does not exist. Creating and starting..."
-            docker run -it --name "${DEFAULT_CONTAINER_NAME}" "${DEFAULT_IMAGE_NAME}" bash
+            
+            # Build docker run command
+            local docker_cmd="docker run -it --name ${DEFAULT_CONTAINER_NAME} --hostname ${DEFAULT_HOSTNAME}"
+            
+            # Add mount points
+            for mount_path in "${MOUNT_PATH[@]}"; do
+                if [ -d "${mount_path}" ] || [ -f "${mount_path}" ]; then
+                    docker_cmd="${docker_cmd} -v ${mount_path}:${mount_path}"
+                    print_info "Mounting: ${mount_path}"
+                else
+                    print_warning "Mount path does not exist: ${mount_path}"
+                fi
+            done
+            
+            # Add current directory mount
+            docker_cmd="${docker_cmd} -v $(pwd):/workspace --workdir /workspace"
+            docker_cmd="${docker_cmd} ${DEFAULT_IMAGE_NAME} bash"
+            
+            print_info "Executing: ${docker_cmd}"
+            eval "${docker_cmd}"
             ;;
         *)
             print_error "Unexpected container status: ${status}"
@@ -161,7 +210,7 @@ clean_all() {
 
 rebuild_image() {
     local image_name=${1:-$DEFAULT_IMAGE_NAME}
-    local container_name =${$2:-$DEFAULT_CONTAINER_NAME}
+    local container_name=${2:-$DEFAULT_CONTAINER_NAME}
 
     print_info "Rebuilding Docker image '${image_name}'..."
     clean_all "${image_name}" "${container_name}"
@@ -175,7 +224,7 @@ build_image() {
     
     if check_image_exists "${image_name}"; then
         print_warning "Docker image '${image_name}' already exists. Skipping build."
-        print_info "If you want to rebuild the image, please remove it first using: ./docker.sh remove"
+        print_info "If you want to rebuild the image, please use: ./docker.sh rebuild"
         return 0
     fi
 
@@ -213,11 +262,15 @@ cat << EOF
         help            - Show this help message
     
     Options:
-        image_name      - Specify a custom image name (optional, default: ${DEFAULT_IMAGE_NAME})
+        --image_name    IMAGE_NAME               Set the name of the Docker image (default: ${DEFAULT_IMAGE_NAME})
+        --cont_name     CONTAINER_NAME           Set the name of the Docker container (default: ${DEFAULT_CONTAINER_NAME})
+        --username      USERNAME                 Set the username inside container (default: ${DEFAULT_USERNAME})
+        --hostname      HOSTNAME                 Set the hostname for container (default: ${DEFAULT_HOSTNAME})
+        --mount         HOST_PATH                Mount a directory/file (can be used multiple times)
     
-    Example:
+    Examples:
         $0 build
-        $0 run
+        $0 run --username \$USER --mount /home/data
         $0 stop
         $0 remove
         $0 rebuild
@@ -226,60 +279,43 @@ cat << EOF
     Default settings:
         Image Name:     ${DEFAULT_IMAGE_NAME}
         Container Name: ${DEFAULT_CONTAINER_NAME}
+        Username:       ${DEFAULT_USERNAME}
+        Hostname:       ${DEFAULT_HOSTNAME}
+
 EOF
 }
 
-if [ $# -eq 0 ]; then
+# Check if command is provided
+if [ -z "${COMMAND}" ]; then
     show_usage
     exit 1
 fi
 
-case "$1" in
+case $COMMAND in
     build)
-        if [ $# -ge 2 ]; then
-            build_image "$2"
-        else
-            build_image
-        fi
+        build_image
         ;;
     run)
         run_container
         ;;
     stop)
-        if [ $# -ge 2 ]; then
-            stop_container "$2"
-        else
-            stop_container
-        fi
+        stop_container
         ;;
     remove)
-        if [ $# -ge 2 ]; then
-            remove_container "$2"
-        else
-            remove_container
-        fi
+        remove_container
         ;;
     clean)
-        if [ $# -ge 2 ]; then
-            clean_all "$2"
-        else
-            clean_all
-        fi
+        clean_all
         ;;
     rebuild)
-        if [ $# -ge 2 ]; then
-            rebuild_image "$2"
-        else
-            rebuild_image
-        fi
+        rebuild_image
         ;;  
     help)
         show_usage
         ;;
     *)
-        print_error "Unknown command: $1"
+        print_error "Unknown command: $COMMAND"
         echo "  Use 'help' to see available commands."
-        echo ""
         show_usage
         exit 1
         ;;
