@@ -34,7 +34,7 @@ print_error() {
 
 check_image_exists() {
     local image_name="$1"
-    if docker images --format "table {{.Repository}}" | grep -q "^${image_name}"; then
+    if docker images --format "table {{.Repository}}" >/dev/null 2>&1; then
         return 0
     else
         return 1
