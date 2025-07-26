@@ -88,6 +88,86 @@ run_container() {
     esac
 }
 
+stop_container() {
+    local container_name=${1:-$DEFAULT_CONTAINER_NAME}
+
+    local status=$(check_container_status "${container_name}")
+
+    case "${status}" in
+        "running")
+            print_info "Stopping container '${container_name}'..."
+            docker stop "${container_name}"
+            print_success "Container '${container_name}' stopped successfully."
+            ;;
+        "stopped")
+            print_info "Container '${container_name}' is already stopped."
+            ;;
+        "not_exists")
+            print_error "Container '${container_name}' does not exist."
+            ;;
+        *)
+            print_error "Unexpected container status: ${status}"
+            return 1
+            ;;
+    esac
+}
+
+remove_container() {
+    local container_name=${1:-$DEFAULT_CONTAINER_NAME}
+
+    local status=$(check_container_status "${container_name}")
+
+    case "${status}" in
+        "running")
+            print_info "Stopping and removing container '${container_name}'..."
+            docker stop "${container_name}"
+            docker rm "${container_name}"
+            print_success "Container '${container_name}' stopped and removed successfully."
+            ;;
+        "stopped")
+            print_info "Removing container '${container_name}'..."
+            docker rm "${container_name}"
+            print_success "Container '${container_name}' removed successfully."
+            ;;
+        "not_exists")
+            print_error "Container '${container_name}' does not exist."
+            ;;
+        *)
+            print_error "Unexpected container status: ${status}"
+            return 1
+            ;;
+    esac
+}
+
+clean_all() {
+    local image_name=${1:-$DEFAULT_IMAGE_NAME}
+    local container_name=${2:-$DEFAULT_CONTAINER_NAME}
+
+    print_info "Cleaning up Docker environment..."
+    remove_container "${container_name}"
+    if check_image_exists "${image_name}"; then
+        print_info "Removing Docker image '${image_name}'..."
+        if docker rmi "${image_name}"; then
+            print_success "Docker image '${image_name}' removed successfully."
+        else
+            print_error "Failed to remove Docker image '${image_name}'. It may be in use by another container."
+            print_info "Please stop and remove any containers using this image first."
+            return 1
+        fi
+    else
+        print_warning "Docker image '${image_name}' does not exist. No action needed."
+    fi
+}
+
+rebuild_image() {
+    local image_name=${1:-$DEFAULT_IMAGE_NAME}
+    local container_name =${$2:-$DEFAULT_CONTAINER_NAME}
+
+    print_info "Rebuilding Docker image '${image_name}'..."
+    clean_all "${image_name}" "${container_name}"
+    build_image "${image_name}"
+}
+
 build_image() {
     local image_name=${1:-$DEFAULT_IMAGE_NAME}
 
@@ -95,9 +175,7 @@ build_image() {
     
     if check_image_exists "${image_name}"; then
         print_warning "Docker image '${image_name}' already exists. Skipping build."
-        print_info "If you want to rebuild the image, please remove it first using:"
-        echo "  docker rmi ${image_name}"
-        echo "Or use: ./docker.sh rebuild"
+        print_info "If you want to rebuild the image, please remove it first using: ./docker.sh remove"
         return 0
     fi
 
@@ -130,6 +208,7 @@ cat << EOF
         run             - Run the Docker container
         stop            - Stop the Docker container
         remove          - Remove the Docker container
+        clean           - Clean up the Docker environment (remove container and image)
         rebuild         - Rebuild the Docker image
         help            - Show this help message
     
@@ -150,36 +229,58 @@ cat << EOF
 EOF
 }
 
-main() {
-    if [ $# -eq 0 ]; then
+if [ $# -eq 0 ]; then
+    show_usage
+    exit 1
+fi
+
+case "$1" in
+    build)
+        if [ $# -ge 2 ]; then
+            build_image "$2"
+        else
+            build_image
+        fi
+        ;;
+    run)
+        run_container
+        ;;
+    stop)
+        if [ $# -ge 2 ]; then
+            stop_container "$2"
+        else
+            stop_container
+        fi
+        ;;
+    remove)
+        if [ $# -ge 2 ]; then
+            remove_container "$2"
+        else
+            remove_container
+        fi
+        ;;
+    clean)
+        if [ $# -ge 2 ]; then
+            clean_all "$2"
+        else
+            clean_all
+        fi
+        ;;
+    rebuild)
+        if [ $# -ge 2 ]; then
+            rebuild_image "$2"
+        else
+            rebuild_image
+        fi
+        ;;  
+    help)
         show_usage
-        return 1
-    fi
-
-    # Parse command line arguments
-    case "$1" in
-        build)
-            if [ $# -ge 2 ]; then
-                build_image "$2"
-            else
-                build_image
-            fi
-            ;;
-        run)
-            run_container
-            ;;
-        help)
-            show_usage
-            ;;
-        *)
-            print_error "Unknown command: $1"
-            echo "  Use 'help' to see available commands."
-            echo ""
-            show_usage
-            return 1
-            ;;
-    esac
-}
-
-# Run the main function with all arguments passed to the script
-main "$@"
+        ;;
+    *)
+        print_error "Unknown command: $1"
+        echo "  Use 'help' to see available commands."
+        echo ""
+        show_usage
+        exit 1
+        ;;
+esac
