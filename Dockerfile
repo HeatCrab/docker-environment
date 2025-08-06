@@ -132,25 +132,17 @@ ENV SYSTEMC_HOME=/opt/systemc
 ENV SYSTEMC_CXXFLAGS="-I${SYSTEMC_HOME}/include -std=c++17"
 ENV CPATH="${SYSTEMC_HOME}/include:"
 ARG TARGETARCH
+RUN echo $SYSTEMC_HOME
 RUN if [ "$TARGETARCH" = "amd64" ]; then \
-        echo "${SYSTEMC_HOME}/lib-linux64" > /etc/ld.so.conf.d/systemc.conf; \
+        echo "${SYSTEMC_HOME}/lib-linux64" >> /etc/ld.so.conf.d/systemc.conf && \
+        echo "export SYSTEMC_LDFLAGS=\"-L${SYSTEMC_HOME}/lib-linux64 -lsystemc\"" >> /etc/bash.bashrc; \
     elif [ "$TARGETARCH" = "arm64" ]; then \
-        echo "${SYSTEMC_HOME}/lib-linuxaarch64" > /etc/ld.so.conf.d/systemc.conf; \
+        echo "${SYSTEMC_HOME}/lib-linuxaarch64" >> /etc/ld.so.conf.d/systemc.conf && \
+        echo "export SYSTEMC_LDFLAGS=\"-L${SYSTEMC_HOME}/lib-linuxaarch64 -lsystemc\"" >> /etc/bash.bashrc; \
     else \
         echo "Unsupported architecture: $TARGETARCH"; exit 1; \
     fi && \
     ldconfig
-
-# Create script to set SystemC LDFLAGS based on runtime architecture
-RUN echo '#!/bin/bash' > /usr/local/bin/set-systemc-env.sh && \
-    echo 'ARCH=$(uname -m)' >> /usr/local/bin/set-systemc-env.sh && \
-    echo 'if [ "$ARCH" = "x86_64" ]; then' >> /usr/local/bin/set-systemc-env.sh && \
-    echo '    export SYSTEMC_LDFLAGS="-L${SYSTEMC_HOME}/lib-linux64 -lsystemc"' >> /usr/local/bin/set-systemc-env.sh && \
-    echo 'elif [ "$ARCH" = "aarch64" ]; then' >> /usr/local/bin/set-systemc-env.sh && \
-    echo '    export SYSTEMC_LDFLAGS="-L${SYSTEMC_HOME}/lib-linuxaarch64 -lsystemc"' >> /usr/local/bin/set-systemc-env.sh && \
-    echo 'fi' >> /usr/local/bin/set-systemc-env.sh && \
-    chmod +x /usr/local/bin/set-systemc-env.sh && \
-    echo 'source /usr/local/bin/set-systemc-env.sh' >> /etc/bash.bashrc
 
 WORKDIR /home/$USERNAME
 
