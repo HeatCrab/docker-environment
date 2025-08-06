@@ -124,6 +124,10 @@ RUN (groupadd -g $USER_GID $USERNAME 2>/dev/null || true) && \
     chown -R $USER_UID:$USER_GID /home/$USERNAME/.conda && \
     chown -R $USER_UID:$USER_GID /opt/systemc
 
+# Copy and install eman script
+COPY eman.sh /usr/local/bin/eman
+RUN chmod +x /usr/local/bin/eman
+
 # Set environment variables for conda
 ENV PATH="/opt/conda/bin:$PATH"
 
