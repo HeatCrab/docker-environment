@@ -101,6 +101,15 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
     echo $TZ > /etc/timezone && \
     dpkg-reconfigure -f noninteractive tzdata
 
+# Install GDB and other debugging tools in the base stage
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        gdb \
+        gdbserver \
+        valgrind \
+        strace && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # Define non-root user 
 ARG USERNAME=user
 ARG USER_UID=1001
